@@ -24,20 +24,13 @@ import (
 
 // Main function for the plugin extension
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-  b := newBackend(conf)
-  if err := b.Setup(ctx, conf); err != nil {
-    return nil, err
-  }
-  return b, nil
-}
+  b := &backend{}
+  b.Logger().Info("===> Factory() called")
 
-func newBackend(conf *logical.BackendConfig) *backend {
-  var b backend
   b.Backend = &framework.Backend{
-    BackendType: logical.TypeLogical,
-    Paths: framework.PathAppend(
-      accountsPaths(&b),
-    ),
+    BackendType:  logical.TypeLogical,
+    Help:         backendHelp,
+    Paths:        paths(b),
     PathsSpecial: &logical.Paths{
       SealWrapStorage: []string{
         "accounts/",
@@ -45,7 +38,12 @@ func newBackend(conf *logical.BackendConfig) *backend {
     },
     Secrets:     []*framework.Secret{},
   }
-  return &b
+
+  b.Logger().Info("===> Calling setup()")
+  if err := b.Setup(ctx, conf); err != nil {
+    return nil, err
+  }
+  return b, nil
 }
 
 type backend struct {
@@ -60,3 +58,7 @@ func (b *backend) pathExistenceCheck(ctx context.Context, req *logical.Request, 
 
   return out != nil, nil
 }
+
+var backendHelp string = `
+This backend provides an HSM interface for Ethereum transaction signing
+`

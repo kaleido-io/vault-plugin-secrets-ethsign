@@ -39,8 +39,8 @@ type Account struct {
   PublicKey   string  `json:"public_key"`
 }
 
-func accountsPaths(b *backend) []*framework.Path {
-  return []*framework.Path{
+func paths(b *backend) []*framework.Path {
+  ret := []*framework.Path{
     &framework.Path{
       Pattern: "accounts",
       Callbacks: map[logical.Operation]framework.OperationFunc{
@@ -122,6 +122,8 @@ func accountsPaths(b *backend) []*framework.Path {
       },
     },
   }
+  b.Logger().Info("===> Returning list of paths", ret)
+  return ret
 }
 
 func (b *backend) listAccounts(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {

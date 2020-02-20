@@ -15,9 +15,9 @@
 package main
 
 import (
-  "log"
   "os"
 
+  "github.com/hashicorp/go-hclog"
   "github.com/hashicorp/vault/api"
   "github.com/hashicorp/vault/sdk/plugin"
   "github.com/kaleido-io/eth-hsm/backend"
@@ -29,14 +29,16 @@ func main() {
   flags.Parse(os.Args[1:])
 
   tlsConfig := pluginMeta.GetTLSConfig()
-  tlsProvider := api.VaultPluginTLSProvider(tlsConfig)
+  tlsProviderFunc := api.VaultPluginTLSProvider(tlsConfig)
 
   err := plugin.Serve(&plugin.ServeOpts{
     BackendFactoryFunc: backend.Factory,
-    TLSProviderFunc:    tlsProvider,
+    TLSProviderFunc:    tlsProviderFunc,
   })
   if err != nil {
-    log.Printf("Failed during startup: %s\n", err)
+    logger := hclog.New(&hclog.LoggerOptions{})
+
+    logger.Error("Eth-HSM plugin failed during startup, shutting down.", "error", err)
     os.Exit(1)
   }
 }
