@@ -1,0 +1,7 @@
+language: go
+env:
+  - BUILD_VERSION=travis-CI GO111MODULE=on
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
+go:
+  - "1.13.x"
