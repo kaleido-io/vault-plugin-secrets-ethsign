@@ -22,8 +22,11 @@ make all
 The plugin must be registered and enabled on the vault server as a secret engine.
 
 ### Enabling on a dev mode server
-The easiest way to try out the plugin is using a dev mode server to load it. First copy it to the plugins folder, say `~/.vault.d/vault-plugins/`.
+The easiest way to try out the plugin is using a dev mode server to load it.
 
+Download the binary: [https://www.vaultproject.io/downloads/](https://www.vaultproject.io/downloads/)
+
+First copy it to the plugins folder, say `~/.vault.d/vault-plugins/`.
 ```
 ./vault server -dev -dev-plugin-dir=/Users/alice/.vault.d/vault_plugins/
 ```
