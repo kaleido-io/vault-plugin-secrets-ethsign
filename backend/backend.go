@@ -1,4 +1,4 @@
-// Copyright © 2018 Immutability, LLC
+// Copyright © 2020 Kaleido
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,21 +32,6 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 		return nil, err
 	}
 	return b, nil
-}
-
-// FactoryType returns the factory
-func FactoryType(backendType logical.BackendType) logical.Factory {
-	return func(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-		b, err := Backend(conf)
-		if err != nil {
-			return nil, err
-		}
-		b.BackendType = backendType
-		if err = b.Setup(ctx, conf); err != nil {
-			return nil, err
-		}
-		return b, nil
-	}
 }
 
 // Backend returns the backend

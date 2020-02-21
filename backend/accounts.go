@@ -1,4 +1,4 @@
-// Copyright © 2018 Immutability, LLC
+// Copyright © 2020 Kaleido
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -295,8 +295,13 @@ func (b *EthereumBackend) signTx(ctx context.Context, req *logical.Request, data
   var nonce uint64
   nonce = nonceIn.Uint64()
 
-  toAddress := common.HexToAddress(rawAddressTo)
-  tx := types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, txDataToSign)
+  var tx *types.Transaction
+  if rawAddressTo == "" {
+    tx = types.NewContractCreation(nonce, amount, gasLimit, gasPrice, txDataToSign)
+  } else {
+    toAddress := common.HexToAddress(rawAddressTo)
+    tx = types.NewTransaction(nonce, toAddress, amount, gasLimit, gasPrice, txDataToSign)
+  }
   var signer types.Signer
   if big.NewInt(0).Cmp(chainId) == 0 {
     signer = types.HomesteadSigner{}
