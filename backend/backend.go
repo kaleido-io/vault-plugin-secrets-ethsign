@@ -1,4 +1,4 @@
-// Copyright © 2020 Kaleido
+// Copyright © 2018 Immutability, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,50 +15,69 @@
 package backend
 
 import (
-  "context"
-  "fmt"
+	"context"
+	"fmt"
 
-  "github.com/hashicorp/vault/sdk/framework"
-  "github.com/hashicorp/vault/sdk/logical"
+	"github.com/hashicorp/vault/sdk/framework"
+	"github.com/hashicorp/vault/sdk/logical"
 )
 
-// Main function for the plugin extension
+// Factory returns the backend
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-  b := &backend{}
-  b.Logger().Info("===> Factory() called")
-
-  b.Backend = &framework.Backend{
-    BackendType:  logical.TypeLogical,
-    Help:         backendHelp,
-    Paths:        paths(b),
-    PathsSpecial: &logical.Paths{
-      SealWrapStorage: []string{
-        "accounts/",
-      },
-    },
-    Secrets:     []*framework.Secret{},
-  }
-
-  b.Logger().Info("===> Calling setup()")
-  if err := b.Setup(ctx, conf); err != nil {
-    return nil, err
-  }
-  return b, nil
+	b, err := Backend(conf)
+	if err != nil {
+		return nil, err
+	}
+	if err := b.Setup(ctx, conf); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
-type backend struct {
-  *framework.Backend
+// FactoryType returns the factory
+func FactoryType(backendType logical.BackendType) logical.Factory {
+	return func(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
+		b, err := Backend(conf)
+		if err != nil {
+			return nil, err
+		}
+		b.BackendType = backendType
+		if err = b.Setup(ctx, conf); err != nil {
+			return nil, err
+		}
+		return b, nil
+	}
 }
 
-func (b *backend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
-  out, err := req.Storage.Get(ctx, req.Path)
-  if err != nil {
-    return false, fmt.Errorf("Path existence check failed: %v", err)
-  }
-
-  return out != nil, nil
+// Backend returns the backend
+func Backend(conf *logical.BackendConfig) (*EthereumBackend, error) {
+	var b EthereumBackend
+	b.Backend = &framework.Backend{
+		Help: "",
+		Paths: framework.PathAppend(
+			paths(&b),
+		),
+		PathsSpecial: &logical.Paths{
+			SealWrapStorage: []string{
+				"accounts/",
+			},
+		},
+		Secrets:     []*framework.Secret{},
+		BackendType: logical.TypeLogical,
+	}
+	return &b, nil
 }
 
-var backendHelp string = `
-This backend provides an HSM interface for Ethereum transaction signing
-`
+// EthereumBackend implements the Backend for this plugin
+type EthereumBackend struct {
+	*framework.Backend
+}
+
+func (b *EthereumBackend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
+	out, err := req.Storage.Get(ctx, req.Path)
+	if err != nil {
+		return false, fmt.Errorf("existence check failed: %v", err)
+	}
+
+	return out != nil, nil
+}

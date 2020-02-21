@@ -20,6 +20,7 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/sdk/plugin"
+  "github.com/kaleido-io/eth-hsm/backend"
 )
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 	tlsProviderFunc := api.VaultPluginTLSProvider(tlsConfig)
 
 	err := plugin.Serve(&plugin.ServeOpts{
-		BackendFactoryFunc: Factory,
+		BackendFactoryFunc: backend.Factory,
 		TLSProviderFunc:    tlsProviderFunc,
 	})
 	if err != nil {
