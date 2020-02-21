@@ -1,0 +1,7 @@
+coverage:
+  status:
+    patch:
+      default:
+        threshold: 0.1%
+  ignore:
+  - "main.go" # Not testable with UTs
