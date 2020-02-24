@@ -141,7 +141,22 @@ func (b *EthereumBackend) listAccounts(ctx context.Context, req *logical.Request
 		b.Logger().Error("Failed to retrieve the list of accounts", "error", err)
 		return nil, err
 	}
-	return logical.ListResponse(vals), nil
+
+  accounts := make([]string, len(vals))
+  // resolve the addresses using the stored mappings
+  for idx, key := range vals {
+    entry, err := req.Storage.Get(ctx, fmt.Sprintf("accounts/%s", key))
+    if err != nil {
+      b.Logger().Error("Failed to retrieve account for key", "key", key)
+      accounts[idx] = "0x0000000000000000000000000000000000000000"
+    } else {
+      var account Account
+      _ = entry.DecodeJSON(&account)
+      accounts[idx] = account.Address
+    }
+  }
+
+	return logical.ListResponse(accounts), nil
 }
 
 func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
