@@ -38,11 +38,16 @@ const (
 	InvalidAddress string = "InvalidAddress"
 )
 
+type KeyAddressMapping struct {
+  Name        string  `json:"name"`
+}
+
 // Account is an Ethereum account
 type Account struct {
-	Address            string   `json:"address"` // Ethereum account address derived from the private key
-	PrivateKey         string   `json:"private_key"`
-	PublicKey          string   `json:"public_key"` // Ethereum public key derived from the private key
+  Name        string  `json:"name"`
+  Address     string   `json:"address"`
+	PrivateKey  string   `json:"private_key"`
+	PublicKey   string   `json:"public_key"`
 }
 
 func paths(b *EthereumBackend) []*framework.Path {
@@ -158,29 +163,51 @@ func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Reques
   hash.Write(publicKeyBytes[1:])
   address := hexutil.Encode(hash.Sum(nil)[12:])
 
-  accountJSON := &Account{
-    Address:            address,
-    PrivateKey:         privateKeyString,
-    PublicKey:          publicKeyString,
-  }
-  // the account is assigned to path "/accounts/key1" using the account's address
+  // the account is assigned to path "/accounts/key1"
   name := data.Get("name").(string)
   accountPath := fmt.Sprintf("accounts/%s", name)
+  // save the mapping b/w the key name and address to the internal storage path "addresses"
+  mappingPath := fmt.Sprintf("mappings/%s", address)
+
+  accountJSON := &Account{
+    Name:         name,
+    Address:      address,
+    PrivateKey:   privateKeyString,
+    PublicKey:    publicKeyString,
+  }
+
+  mappingJSON := &KeyAddressMapping{
+    Name:         name,
+  }
+
+  // make the same signing account addressible by name
   entry, err := logical.StorageEntryJSON(accountPath, accountJSON)
   if err != nil {
-		b.Logger().Error("Failed to construct storage JSON for the new account", "error", err)
+		b.Logger().Error("Failed to construct storage JSON for the new account by name", "error", err)
+    return nil, err
+  }
+  err = req.Storage.Put(ctx, entry)
+  if err != nil {
+		b.Logger().Error("Failed to save the new account to storage by name", "error", err)
     return nil, err
   }
 
+  // make the same signing account addressible by address
+  entry, err = logical.StorageEntryJSON(mappingPath, mappingJSON)
+  if err != nil {
+    b.Logger().Error("Failed to construct storage JSON for the new account by address", "error", err)
+    return nil, err
+  }
   err = req.Storage.Put(ctx, entry)
   if err != nil {
-		b.Logger().Error("Failed to save the new account to storage", "error", err)
+    b.Logger().Error("Failed to save the new account to storage by address", "error", err)
     return nil, err
   }
 
   return &logical.Response{
     Data: map[string]interface{}{
-      "address": accountJSON.Address,
+      "name":     accountJSON.Name,
+      "address":  accountJSON.Address,
     },
   }, nil
 }
@@ -198,7 +225,8 @@ func (b *EthereumBackend) readAccount(ctx context.Context, req *logical.Request,
 
   return &logical.Response{
     Data: map[string]interface{}{
-      "address": account.Address,
+      "name":     account.Name,
+      "address":  account.Address,
     },
   }, nil
 }
@@ -213,7 +241,7 @@ func (b *EthereumBackend) deleteAccount(ctx context.Context, req *logical.Reques
 	if account == nil {
 		return nil, nil
 	}
-	if err := req.Storage.Delete(ctx, req.Path); err != nil {
+	if err := req.Storage.Delete(ctx, fmt.Sprintf("accounts/%s", account.Name)); err != nil {
 		b.Logger().Error("Failed to delete the account from storage", "name", name, "error", err)
 		return nil, err
 	}
@@ -221,7 +249,35 @@ func (b *EthereumBackend) deleteAccount(ctx context.Context, req *logical.Reques
 }
 
 func (b *EthereumBackend) retrieveAccount(ctx context.Context, req *logical.Request, name string) (*Account, error) {
-  path := fmt.Sprintf("accounts/%s", name)
+  var path string
+  matched, err := regexp.MatchString("^(0x)?[0-9a-fA-F]{40}$", name)
+  if !matched || err != nil {
+    path = fmt.Sprintf("accounts/%s", name)
+  } else {
+    // make sure the address has the "0x prefix"
+    if name[:2] != "0x" {
+      name = "0x" + name
+    }
+    // this is an address, first look up the mapping to get the corresponding key name
+    path = fmt.Sprintf("mappings/%s", name)
+    entry, err := req.Storage.Get(ctx, path)
+    if err != nil {
+      b.Logger().Error("Failed to retrieve the address mapping", "path", path, "error", err)
+      return nil, err
+    }
+    if entry == nil {
+      // could not find the corresponding key name for the address
+      return nil, nil
+    }
+    var mapping KeyAddressMapping
+    err = entry.DecodeJSON(&mapping)
+    if err != nil {
+      b.Logger().Error("Failed to decode key name from mapping", "error", err)
+      return nil, err
+    }
+    path = fmt.Sprintf("accounts/%s", mapping.Name)
+  }
+
   entry, err := req.Storage.Get(ctx, path)
   if err != nil {
 		b.Logger().Error("Failed to retrieve the account", "path", path, "error", err)
@@ -360,4 +416,3 @@ func Decode(src []byte) ([]byte, error) {
   raw = raw[:n]
   return raw[:], nil
 }
-
