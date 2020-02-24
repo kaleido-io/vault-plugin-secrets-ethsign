@@ -15,14 +15,23 @@
 package backend
 
 import (
+  "bytes"
   "context"
+  "math/big"
   "reflect"
+  "strings"
   "testing"
   "time"
+
+  "github.com/ethereum/go-ethereum/common/hexutil"
+  "github.com/ethereum/go-ethereum/core/types"
+  "github.com/ethereum/go-ethereum/rlp"
 
   log "github.com/hashicorp/go-hclog"
   "github.com/hashicorp/vault/sdk/helper/logging"
   "github.com/hashicorp/vault/sdk/logical"
+
+  "github.com/stretchr/testify/assert"
 )
 
 func getBackend(t *testing.T) (logical.Backend, logical.Storage) {
@@ -45,21 +54,31 @@ func getBackend(t *testing.T) (logical.Backend, logical.Storage) {
 }
 
 func TestAccounts(t *testing.T) {
+  assert := assert.New(t)
+
   b, _ := getBackend(t)
 
   // create key1
   req := logical.TestRequest(t, logical.CreateOperation, "accounts/key1")
   storage := req.Storage
-  if _, err := b.HandleRequest(context.Background(), req); err != nil {
+  res, err := b.HandleRequest(context.Background(), req)
+  if err != nil {
     t.Fatalf("err: %v", err)
   }
+
+  address1 := res.Data["address"].(string)
+  assert.Equal("key1", res.Data["name"])
 
   // create key2
   req = logical.TestRequest(t, logical.CreateOperation, "accounts/key2")
   req.Storage = storage
-  if _, err := b.HandleRequest(context.Background(), req); err != nil {
+  res, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
     t.Fatalf("err: %v", err)
   }
+
+  address2 := res.Data["address"].(string)
+  assert.Equal("key2", res.Data["name"])
 
   req = logical.TestRequest(t, logical.ListOperation, "accounts")
   req.Storage = storage
@@ -70,7 +89,7 @@ func TestAccounts(t *testing.T) {
 
   expected := &logical.Response{
     Data: map[string]interface{}{
-      "keys": []string{"key1", "key2"},
+      "keys": []string{address1, address2},
     },
   }
 
@@ -78,17 +97,118 @@ func TestAccounts(t *testing.T) {
     t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
   }
 
-  // delete key2
-  req = logical.TestRequest(t, logical.DeleteOperation, "accounts/key2")
+  // read account by key name
+  req = logical.TestRequest(t, logical.ReadOperation, "accounts/key1")
+  req.Storage = storage
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  expected = &logical.Response{
+    Data: map[string]interface{}{
+      "address": address1,
+      "name": "key1",
+    },
+  }
+  if !reflect.DeepEqual(resp, expected) {
+    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
+  }
+
+  // read account by address
+  req = logical.TestRequest(t, logical.ReadOperation, "accounts/" + address1)
+  req.Storage = storage
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  if !reflect.DeepEqual(resp, expected) {
+    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
+  }
+
+  // read account by address without the "0x" prefix
+  req = logical.TestRequest(t, logical.ReadOperation, "accounts/" + address1[2:])
+  req.Storage = storage
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  if !reflect.DeepEqual(resp, expected) {
+    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
+  }
+
+  // sign contract creation TX by address using Homestead signer
+  dataToSign := "608060405234801561001057600080fd5b506040516020806101d783398101604052516000556101a3806100346000396000f3006080604052600436106100615763ffffffff7c01000000000000000000000000000000000000000000000000000000006000350416632a1afcd981146100665780632c46b2051461008d57806360fe47b1146100a25780636d4ce63c1461008d575b600080fd5b34801561007257600080fd5b5061007b6100ba565b60408051918252519081900360200190f35b34801561009957600080fd5b5061007b6100c0565b3480156100ae57600080fd5b5061007b6004356100c6565b60005481565b60005490565b60006064821061013757604080517f08c379a000000000000000000000000000000000000000000000000000000000815260206004820152601960248201527f56616c75652063616e206e6f74206265206f7665722031303000000000000000604482015290519081900360640190fd5b60008290556040805183815290517f9455957c3b77d1d4ed071e2b469dd77e37fc5dfd3b4d44dc8a997cc97c7b3d499181900360200190a15050600054905600a165627a7a72305820a22d4674e519555e6f065ccf98b5bd479e108895cbddc10cba200c775d0008730029000000000000000000000000000000000000000000000000000000000000000a"
+  req = logical.TestRequest(t, logical.CreateOperation, "accounts/" + address1 + "/sign")
+  req.Storage = storage
+  data := map[string]interface{}{
+    "data": dataToSign,
+    "gas": 500000,
+    "nonce": "0x2",
+    "gasPrice": 0,
+  }
+  req.Data = data
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  signedTx := resp.Data["signed_transaction"].(string)
+  signatureBytes, err := hexutil.Decode(signedTx)
+  var tx types.Transaction
+  err = tx.DecodeRLP(rlp.NewStream(bytes.NewReader(signatureBytes), 0))
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  v, _, _ := tx.RawSignatureValues()
+  assert.Equal(true, contains([]*big.Int{big.NewInt(27), big.NewInt(28)}, v))
+
+  sender, _ := types.Sender(types.HomesteadSigner{}, &tx)
+  assert.Equal(address1, strings.ToLower(sender.Hex()))
+
+  // sign TX by address without "0x" using EIP155 signer
+  dataToSign = "60fe47b10000000000000000000000000000000000000000000000000000000000000014"
+  req = logical.TestRequest(t, logical.CreateOperation, "accounts/" + address2[2:] + "/sign")
+  req.Storage = storage
+  data = map[string]interface{}{
+    "data": dataToSign,
+    "to": "0xf809410b0d6f047c603deb311979cd413e025a84",
+    "gas": 50000,
+    "nonce": "0x3",
+    "gasPrice": 0,
+    "chainId": 12345,
+  }
+  req.Data = data
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  signedTx = resp.Data["signed_transaction"].(string)
+  signatureBytes, err = hexutil.Decode(signedTx)
+  err = tx.DecodeRLP(rlp.NewStream(bytes.NewReader(signatureBytes), 0))
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  v, _, _ = tx.RawSignatureValues()
+  assert.Equal(true, contains([]*big.Int{big.NewInt(24725), big.NewInt(24726)}, v))
+
+  sender, _ = types.Sender(types.HomesteadSigner{}, &tx)
+  assert.Equal(address1, strings.ToLower(sender.Hex()))
+
+  // delete key by name
+  req = logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
   req.Storage = storage
   if _, err := b.HandleRequest(context.Background(), req); err != nil {
     t.Fatalf("err: %v", err)
   }
 
   expected = &logical.Response{
-    Data: map[string]interface{}{
-      "keys": []string{"key1"},
-    },
+    Data: map[string]interface{}{},
+  }
+
+  // delete key by address
+  req = logical.TestRequest(t, logical.DeleteOperation, "accounts/" + address2)
+  req.Storage = storage
+  if _, err := b.HandleRequest(context.Background(), req); err != nil {
+    t.Fatalf("err: %v", err)
   }
 
   req = logical.TestRequest(t, logical.ListOperation, "accounts")
@@ -101,5 +221,14 @@ func TestAccounts(t *testing.T) {
   if !reflect.DeepEqual(resp, expected) {
     t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
   }
+}
+
+func contains(arr []*big.Int, value *big.Int) bool {
+   for _, a := range arr {
+      if a.Cmp(value) == 0 {
+         return true
+      }
+   }
+   return false
 }
 
