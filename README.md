@@ -1,5 +1,6 @@
 # eth-hasm
 
+[![Build Status](https://travis-ci.org/kaleido-io/eth-hsm.svg?branch=master)](https://travis-ci.org/kaleido-io/eth-hsm)
 [![codecov](https://codecov.io/gh/kaleido-io/eth-hsm/branch/master/graph/badge.svg?token=3LlJ7aSeW2)](https://codecov.io/gh/kaleido-io/eth-hsm)
 
 A HashiCorp Vault plugin that supports secp256k1 based signing, with an API interface that turns the vault into a software-based HSM device.
