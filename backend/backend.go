@@ -35,8 +35,8 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 }
 
 // Backend returns the backend
-func Backend(conf *logical.BackendConfig) (*EthereumBackend, error) {
-	var b EthereumBackend
+func Backend(conf *logical.BackendConfig) (*backend, error) {
+	var b backend
 	b.Backend = &framework.Backend{
 		Help: "",
 		Paths: framework.PathAppend(
@@ -53,12 +53,12 @@ func Backend(conf *logical.BackendConfig) (*EthereumBackend, error) {
 	return &b, nil
 }
 
-// EthereumBackend implements the Backend for this plugin
-type EthereumBackend struct {
+// backend implements the Backend for this plugin
+type backend struct {
 	*framework.Backend
 }
 
-func (b *EthereumBackend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
+func (b *backend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
 	out, err := req.Storage.Get(ctx, req.Path)
 	if err != nil {
 		return false, fmt.Errorf("existence check failed: %v", err)

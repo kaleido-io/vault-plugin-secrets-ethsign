@@ -49,7 +49,7 @@ type Account struct {
 	PublicKey   string   `json:"public_key"`
 }
 
-func paths(b *EthereumBackend) []*framework.Path {
+func paths(b *backend) []*framework.Path {
   return []*framework.Path{
     &framework.Path{
       Pattern: "accounts/?",
@@ -134,7 +134,7 @@ func paths(b *EthereumBackend) []*framework.Path {
   }
 }
 
-func (b *EthereumBackend) listAccounts(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) listAccounts(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	vals, err := req.Storage.List(ctx, "accounts/")
 	if err != nil {
 		b.Logger().Error("Failed to retrieve the list of accounts", "error", err)
@@ -158,7 +158,7 @@ func (b *EthereumBackend) listAccounts(ctx context.Context, req *logical.Request
 	return logical.ListResponse(accounts), nil
 }
 
-func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
   privateKey, _ := crypto.GenerateKey()
   defer ZeroKey(privateKey)
   privateKeyBytes := crypto.FromECDSA(privateKey)
@@ -214,7 +214,7 @@ func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Reques
   }, nil
 }
 
-func (b *EthereumBackend) readAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
   name := data.Get("name").(string)
 	b.Logger().Info("Retrieving account for name", "name", name)
   account, err := b.retrieveAccount(ctx, req, name)
@@ -233,7 +233,7 @@ func (b *EthereumBackend) readAccount(ctx context.Context, req *logical.Request,
   }, nil
 }
 
-func (b *EthereumBackend) deleteAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	name := data.Get("name").(string)
 	account, err := b.retrieveAccount(ctx, req, name)
 	if err != nil {
@@ -250,7 +250,7 @@ func (b *EthereumBackend) deleteAccount(ctx context.Context, req *logical.Reques
 	return nil, nil
 }
 
-func (b *EthereumBackend) retrieveAccount(ctx context.Context, req *logical.Request, name string) (*Account, error) {
+func (b *backend) retrieveAccount(ctx context.Context, req *logical.Request, name string) (*Account, error) {
   var path string
   matched, err := regexp.MatchString("^(0x)?[0-9a-fA-F]{40}$", name)
   if !matched || err != nil {
@@ -290,7 +290,7 @@ func (b *EthereumBackend) retrieveAccount(ctx context.Context, req *logical.Requ
   return &account, nil
 }
 
-func (b *EthereumBackend) signTx(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) signTx(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
   from := data.Get("name").(string)
 
   var txDataToSign []byte
