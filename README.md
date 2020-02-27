@@ -1,11 +1,11 @@
-# eth-hasm
+# vault-plugin-secrets-ethsign
 
-[![Build Status](https://travis-ci.org/kaleido-io/eth-hsm.svg?branch=master)](https://travis-ci.org/kaleido-io/eth-hsm)
-[![codecov](https://codecov.io/gh/kaleido-io/eth-hsm/branch/master/graph/badge.svg?token=3LlJ7aSeW2)](https://codecov.io/gh/kaleido-io/eth-hsm)
+[![Build Status](https://travis-ci.org/kaleido-io/vault-plugin-secrets-ethsign.svg?branch=master)](https://travis-ci.org/kaleido-io/vault-plugin-secrets-ethsign)
+[![codecov](https://codecov.io/gh/kaleido-io/vault-plugin-secrets-ethsign/branch/master/graph/badge.svg?token=3LlJ7aSeW2)](https://codecov.io/gh/kaleido-io/vault-plugin-secrets-ethsign)
 
 A HashiCorp Vault plugin that supports secp256k1 based signing, with an API interface that turns the vault into a software-based HSM device.
 
-![Overview](/resources/eth-hsm.png)
+![Overview](/resources/overview.png)
 
 The plugin only exposes the following endpoints to enable the client to generate signing keys for the secp256k1 curve suitable for signing Ethereum transactions, list existing signing keys by their names and addresses, and a `/sign` endpoint for each account. The generated private keys are saved in the vault as a secret. It never gives out the private keys.
 
@@ -61,7 +61,7 @@ sys/          system       system_21e0c7c7       system endpoints used for contr
 ```
 
 ### Enabling on a non-dev mode server
-Setting up a non-dev mode server is beyond the scope of this README, as this is a very sensitive IT operation. But a simple procedure can be found in [the wiki page](https://github.com/kaleido-io/eth-hsm/wiki/Setting-Up-A-Local-HashiCorp-Vault-Server).
+Setting up a non-dev mode server is beyond the scope of this README, as this is a very sensitive IT operation. But a simple procedure can be found in [the wiki page](https://github.com/kaleido-io/vault-plugin-secrets-ethsign/wiki/Setting-Up-A-Local-HashiCorp-Vault-Server).
 
 Before enabling the plugin on the server, it must first be registered.
 
