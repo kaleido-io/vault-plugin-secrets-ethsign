@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
-  "encoding/hex"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -160,11 +159,7 @@ func (b *EthereumBackend) listAccounts(ctx context.Context, req *logical.Request
 }
 
 func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-  privateKey, err := crypto.GenerateKey()
-  if err != nil {
-		b.Logger().Error("Failed to generate private key for a new account", "error", err)
-    return nil, err
-  }
+  privateKey, _ := crypto.GenerateKey()
   defer ZeroKey(privateKey)
   privateKeyBytes := crypto.FromECDSA(privateKey)
   privateKeyString := hexutil.Encode(privateKeyBytes)[2:]
@@ -196,23 +191,15 @@ func (b *EthereumBackend) createAccount(ctx context.Context, req *logical.Reques
   }
 
   // make the same signing account addressible by name
-  entry, err := logical.StorageEntryJSON(accountPath, accountJSON)
-  if err != nil {
-		b.Logger().Error("Failed to construct storage JSON for the new account by name", "error", err)
-    return nil, err
-  }
-  err = req.Storage.Put(ctx, entry)
+  entry, _ := logical.StorageEntryJSON(accountPath, accountJSON)
+  err := req.Storage.Put(ctx, entry)
   if err != nil {
 		b.Logger().Error("Failed to save the new account to storage by name", "error", err)
     return nil, err
   }
 
   // make the same signing account addressible by address
-  entry, err = logical.StorageEntryJSON(mappingPath, mappingJSON)
-  if err != nil {
-    b.Logger().Error("Failed to construct storage JSON for the new account by address", "error", err)
-    return nil, err
-  }
+  entry, _ = logical.StorageEntryJSON(mappingPath, mappingJSON)
   err = req.Storage.Put(ctx, entry)
   if err != nil {
     b.Logger().Error("Failed to save the new account to storage by address", "error", err)
@@ -286,10 +273,6 @@ func (b *EthereumBackend) retrieveAccount(ctx context.Context, req *logical.Requ
     }
     var mapping KeyAddressMapping
     err = entry.DecodeJSON(&mapping)
-    if err != nil {
-      b.Logger().Error("Failed to decode key name from mapping", "error", err)
-      return nil, err
-    }
     path = fmt.Sprintf("accounts/%s", mapping.Name)
   }
 
@@ -303,13 +286,7 @@ func (b *EthereumBackend) retrieveAccount(ctx context.Context, req *logical.Requ
   }
 
   var account Account
-  err = entry.DecodeJSON(&account)
-
-  if account.Address == "" {
-		b.Logger().Error("Failed to deserialize the account", "error", err)
-    return nil, fmt.Errorf("Failed to deserialize account at %s", path)
-  }
-
+  _ = entry.DecodeJSON(&account)
   return &account, nil
 }
 
@@ -317,8 +294,12 @@ func (b *EthereumBackend) signTx(ctx context.Context, req *logical.Request, data
   from := data.Get("name").(string)
 
   var txDataToSign []byte
-  dataOrFile := data.Get("data").(string)
-  txDataToSign, err := Decode([]byte(dataOrFile))
+  dataInput := data.Get("data").(string)
+  if len(dataInput) > 2 && dataInput[0:2] != "0x" {
+    dataInput = "0x" + dataInput
+  }
+
+  txDataToSign, err := hexutil.Decode(dataInput)
   if err != nil {
 		b.Logger().Error("Failed to decode payload for the 'data' field", "error", err)
     return nil, err
@@ -408,26 +389,9 @@ func ValidNumber(input string) *big.Int {
 	return amount.Abs(amount)
 }
 
-func nonEmptyAddress(name, rawAddress string) (string, error) {
-	if rawAddress == InvalidAddress || rawAddress == "" {
-		return "", fmt.Errorf("%s must be supplied", name)
-	}
-	return rawAddress, nil
-}
-
 func ZeroKey(k *ecdsa.PrivateKey) {
   b := k.D.Bits()
   for i := range b {
     b[i] = 0
   }
-}
-
-func Decode(src []byte) ([]byte, error) {
-  raw := make([]byte, hex.EncodedLen(len(src)))
-  n, err := hex.Decode(raw, src)
-  if err != nil {
-    return nil, err
-  }
-  raw = raw[:n]
-  return raw[:], nil
 }
