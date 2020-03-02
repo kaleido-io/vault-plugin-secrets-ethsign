@@ -1,4 +1,4 @@
-module github.com/kaleido-io/eth-hsm
+module github.com/kaleido-io/vault-plugin-secrets-ethsign
 
 go 1.13
 

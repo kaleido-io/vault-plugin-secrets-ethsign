@@ -447,7 +447,7 @@ func TestSignTxFailure3(t *testing.T) {
   resp, err := b.HandleRequest(context.Background(), req)
 
   assert.Nil(resp)
-  assert.Nil(err)
+  assert.Equal("Signing account 0xf809410b0d6f047c603deb311979cd413e025a84 does not exist", err.Error())
 }
 
 func TestSignTxFailure4(t *testing.T) {

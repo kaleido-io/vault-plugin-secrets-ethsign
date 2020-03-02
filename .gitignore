@@ -1,3 +1,6 @@
-eth-hsm
 coverage.txt
 **/debug.test
+# binary from "make" build
+ethsign
+# binary from "go build"
+vault-plugin-secrets-ethsign

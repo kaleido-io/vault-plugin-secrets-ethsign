@@ -222,7 +222,7 @@ func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *f
   	return nil, err
   }
   if account == nil {
-  	return nil, nil
+  	return nil, fmt.Errorf("Account does not exist")
   }
 
   return &logical.Response{
@@ -311,7 +311,7 @@ func (b *backend) signTx(ctx context.Context, req *logical.Request, data *framew
     return nil, fmt.Errorf("Error retrieving signing account %s", from)
   }
   if account == nil {
-    return nil, nil
+    return nil, fmt.Errorf("Signing account %s does not exist", from)
   }
   amount := ValidNumber(data.Get("value").(string))
   if amount == nil {
