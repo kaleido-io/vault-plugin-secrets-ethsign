@@ -11,6 +11,6 @@ ethsign: ${SRC_GOFILES}
 build: ethsign
 clean: 
 		$(VGO) clean
-		rm -f ethsign
+		rm -f ${BINARY_NAME}
 deps:
 		$(VGO) get
