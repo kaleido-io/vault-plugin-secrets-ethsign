@@ -19,6 +19,8 @@ To build the binary:
 make all
 ```
 
+The output is `ethsign`
+
 ## Installing the Plugin on HashiCorp Vault server
 The plugin must be registered and enabled on the vault server as a secret engine.
 
@@ -27,12 +29,12 @@ The easiest way to try out the plugin is using a dev mode server to load it.
 
 Download the binary: [https://www.vaultproject.io/downloads/](https://www.vaultproject.io/downloads/)
 
-First copy it to the plugins folder, say `~/.vault.d/vault-plugins/`.
+First copy the build output binary `ethsign` to the plugins folder, say `~/.vault.d/vault-plugins/`.
 ```
 ./vault server -dev -dev-plugin-dir=/Users/alice/.vault.d/vault_plugins/
 ```
 
-The plugin should have already been registered in the system plugins catalog:
+After the dev server starts, the plugin should have already been registered in the system plugins catalog:
 ```
 $ ./vault login <root token>
 $ ./vault read sys/plugins/catalog
@@ -40,12 +42,12 @@ Key         Value
 ---         -----
 auth        [alicloud app-id approle aws azure centrify cert cf gcp github jwt kubernetes ldap oci oidc okta pcf radius userpass]
 database    [cassandra-database-plugin elasticsearch-database-plugin hana-database-plugin influxdb-database-plugin mongodb-database-plugin mssql-database-plugin mysql-aurora-database-plugin mysql-database-plugin mysql-legacy-database-plugin mysql-rds-database-plugin postgresql-database-plugin]
-secret      [ad alicloud aws azure cassandra consul eth-hsm gcp gcpkms kv mongodb mssql mysql nomad pki postgresql rabbitmq ssh totp transit]
+secret      [ad alicloud aws azure cassandra consul ethsign gcp gcpkms kv mongodb mssql mysql nomad pki postgresql rabbitmq ssh totp transit]
 ```
 
-Note the `eth-hsm` entry in the secret section. Now it's ready to be enabled:
+Note the `ethsign` entry in the secret section. Now it's ready to be enabled:
 ```
- ./vault secrets enable -path=ethereum -description="Eth HSM" -plugin-name=eth-hsm plugin
+ ./vault secrets enable -path=ethereum -description="Ethereum Wallet" -plugin-name=ethsign plugin
 ```
 
 To verify the new secret engine based on the plugin has been enabled:
@@ -54,7 +56,7 @@ $ ./vault secrets list
 Path          Type         Accessor              Description
 ----          ----         --------              -----------
 cubbyhole/    cubbyhole    cubbyhole_1f1e372d    per-token private secret storage
-ethereum/     eth-hsm      eth-hsm_d9f104c7      Eth HSM
+ethereum/     ethsign      ethsign_d9f104c7      Ethereum Wallet
 identity/     identity     identity_382e2000     identity store
 secret/       kv           kv_32f5a684           key/value secret storage
 sys/          system       system_21e0c7c7       system endpoints used for control, policy and debugging
@@ -67,23 +69,23 @@ Before enabling the plugin on the server, it must first be registered.
 
 First copy the binary to the plugin folder for the server (consult the configuration file for the plugin folder location). Then calculate a SHA256 hash for the binary.
 ```
-shasum -a 256 ./eth-hsm 
+shasum -a 256 ./ethsign
 ```
 
 Use the hash to register the plugin with vault:
 ```
- ./vault write sys/plugins/catalog/eth-hsm sha_256=$SHA command="eth-hsm"
+ ./vault write sys/plugins/catalog/eth-hsm sha_256=$SHA command="ethsign"
 ```
 
 Once registered, just like in dev mode, it's ready to be enabled as a secret engine:
 ```
- ./vault secrets enable -path=ethereum -description="Eth HSM" -plugin-name=eth-hsm plugin
+ ./vault secrets enable -path=ethereum -description="Eth Signing Wallet" -plugin-name=ethsign plugin
 ```
 
-## Interacting with the eth-hsm Plugin
-The plugin does not interact with the target blockchain. It has very simple responsibilities: sign transactions to submit to an Ethereum blockchain.
+## Interacting with the ethsign Plugin
+The plugin does not interact with the target blockchain. It has very simple responsibilities: sign transactions for submission to an Ethereum blockchain.
 
-Create a new Ethereum account in the vault:
+Create a new Ethereum account in the vault by specifying a key name, `key1` in the following example:
 ```
 $ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{}' http://localhost:8200/v1/ethereum/accounts/key1 |jq
 {
@@ -100,9 +102,11 @@ $ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d 
 }
 ```
 
+Note that the plugin is implemented such that the key names, such as `key1` in the example above, do not get persisted. Instead the address of the signing key is used as the index.
+
 List existing accounts:
 ```
-$  curl -H "Authorization: Bearer $TOKEN" -X LIST http://localhost:8200/v1/ethereum/accounts/ |jq
+$  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts?list=true |jq
 {
   "request_id": "56c31ef5-9757-1ff4-354e-3b18ecd8ea77",
   "lease_id": "",
@@ -110,7 +114,8 @@ $  curl -H "Authorization: Bearer $TOKEN" -X LIST http://localhost:8200/v1/ether
   "lease_duration": 0,
   "data": {
     "keys": [
-      "key1"
+      "0xb579cbf259a8d36b22f2799eeeae5f3553b11eb7",
+      "0x54edadf1696986c1884534bc6b633ff9a7fdb747"
     ]
   },
   "wrap_info": null,
@@ -119,16 +124,17 @@ $  curl -H "Authorization: Bearer $TOKEN" -X LIST http://localhost:8200/v1/ether
 }
 ```
 
-Inspect the key for the public address:
+Inspect the key using the address:
 ```
-$  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/key1 |jq
+$  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/0x54edadf1696986c1884534bc6b633ff9a7fdb747 |jq
 {
   "request_id": "a183425c-0998-0888-c768-8dda4ff60bef",
   "lease_id": "",
   "renewable": false,
   "lease_duration": 0,
   "data": {
-    "address": "0xb579cbf259a8d36b22f2799eeeae5f3553b11eb7"
+    "address": "0xb579cbf259a8d36b22f2799eeeae5f3553b11eb7",
+    "name": "key1"
   },
   "wrap_info": null,
   "warnings": null,
@@ -138,7 +144,7 @@ $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/acco
 
 Use one of the accounts to sign a transaction:
 ```
-$  curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/key1/sign -d '{"data":"0x60fe47b10000000000000000000000000000000000000000000000000000000000000014","gas":30791,"gasPrice":0,"nonce":"0x0","to":"0xca0fe7354981aeb9d051e2f709055eb50b774087"}' |jq
+$  curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/0xc9389f98b1c5f5f9b6b61b5e3769471d550ad596/sign -d '{"data":"0x60fe47b10000000000000000000000000000000000000000000000000000000000000014","gas":30791,"gasPrice":0,"nonce":"0x0","to":"0xca0fe7354981aeb9d051e2f709055eb50b774087"}' |jq
 {
   "request_id": "4b68c813-eda9-e3c7-4651-e9dbc526bf47",
   "lease_id": "",
@@ -157,3 +163,7 @@ $  curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" ht
 To sign a contract deploy, simply skip the `to` parameter in the JSON payload.
 
 To use EIP155 signer, instead of Homestead signer, pass in `chainId` in the JSON payload.
+
+The `signed_transaction` value in the response is already RLP encoded and can be submitted to an Ethereum blockchain directly.
+
+
