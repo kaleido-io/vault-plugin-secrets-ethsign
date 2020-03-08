@@ -102,6 +102,10 @@ func paths(b *backend) []*framework.Path {
           Type:        framework.TypeString,
           Description: "The compiled code of a contract OR the hash of the invoked method signature and encoded parameters.",
         },
+        "input": &framework.FieldSchema{
+          Type:        framework.TypeString,
+          Description: "The compiled code of a contract OR the hash of the invoked method signature and encoded parameters.",
+        },
         "value": &framework.FieldSchema{
           Type:        framework.TypeString,
           Description: "(optional) Integer of the value sent with this transaction (in wei).",
@@ -295,6 +299,10 @@ func (b *backend) signTx(ctx context.Context, req *logical.Request, data *framew
 
   var txDataToSign []byte
   dataInput := data.Get("data").(string)
+  // some client such as go-ethereum uses "input" instead of "data"
+  if dataInput == "" {
+    dataInput = data.Get("input").(string)
+  }
   if len(dataInput) > 2 && dataInput[0:2] != "0x" {
     dataInput = "0x" + dataInput
   }

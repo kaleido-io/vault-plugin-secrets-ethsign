@@ -234,6 +234,20 @@ func TestAccounts(t *testing.T) {
   sender, _ = types.Sender(types.HomesteadSigner{}, &tx)
   assert.Equal(address1, strings.ToLower(sender.Hex()))
 
+  data = map[string]interface{}{
+    "input": dataToSign,
+    "to": "0xf809410b0d6f047c603deb311979cd413e025a84",
+    "gas": 50000,
+    "nonce": "0x3",
+    "gasPrice": 0,
+    "chainId": 12345,
+  }
+  req.Data = data
+  resp, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+
   // delete key by name
   req = logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
   req.Storage = storage
