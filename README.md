@@ -76,6 +76,7 @@ Use the hash to register the plugin with vault:
 ```
  ./vault write sys/plugins/catalog/eth-hsm sha_256=$SHA command="ethsign"
 ```
+> If the target vault server is enabled for TLS, and is using a self-signed certificate or other non-verifiable TLS certificate, then the command value needs to contain the switch to turn off TLS verify: `command="ethsign -tls-skip-verify"`
 
 Once registered, just like in dev mode, it's ready to be enabled as a secret engine:
 ```
