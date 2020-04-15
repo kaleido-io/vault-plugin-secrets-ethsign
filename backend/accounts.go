@@ -37,13 +37,8 @@ const (
 	InvalidAddress string = "InvalidAddress"
 )
 
-type KeyAddressMapping struct {
-  Name        string  `json:"name"`
-}
-
 // Account is an Ethereum account
 type Account struct {
-  Name        string  `json:"name"`
   Address     string   `json:"address"`
 	PrivateKey  string   `json:"private_key"`
 	PublicKey   string   `json:"public_key"`
@@ -51,90 +46,9 @@ type Account struct {
 
 func paths(b *backend) []*framework.Path {
   return []*framework.Path{
-    &framework.Path{
-      Pattern: "accounts/?",
-      Callbacks: map[logical.Operation]framework.OperationFunc{
-        logical.ListOperation: b.listAccounts,
-      },
-      HelpSynopsis: "List all the Ethereum accounts maintained by the plugin backend.",
-      HelpDescription: `
-
-      LIST - list all accounts
-
-      `,
-    },
-    &framework.Path{
-      Pattern:      "accounts/" + framework.GenericNameRegex("name"),
-      HelpSynopsis: "Create, get or delete an Ethereum account by name",
-      HelpDescription: `
-
-      POST - create a new account for the given name
-      GET - return the account by the name
-      DELETE - deletes the account by the name
-
-      `,
-      Fields: map[string]*framework.FieldSchema{
-        "name": &framework.FieldSchema{Type: framework.TypeString},
-      },
-      ExistenceCheck: b.pathExistenceCheck,
-      Callbacks: map[logical.Operation]framework.OperationFunc{
-      	logical.CreateOperation:	b.createAccount,
-        logical.ReadOperation:   	b.readAccount,
-        logical.DeleteOperation: 	b.deleteAccount,
-      },
-    },
-    &framework.Path{
-      Pattern:      "accounts/" + framework.GenericNameRegex("name") + "/sign",
-      HelpSynopsis: "Sign a provided transaction object.",
-      HelpDescription: `
-
-      Sign a transaction object with properties conforming to the Ethereum JSON-RPC documentation.
-
-      `,
-      Fields: map[string]*framework.FieldSchema{
-        "name": &framework.FieldSchema{Type: framework.TypeString},
-        "to": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "(optional when creating new contract) The contract address the transaction is directed to.",
-          Default:     "",
-        },
-        "data": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "The compiled code of a contract OR the hash of the invoked method signature and encoded parameters.",
-        },
-        "input": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "The compiled code of a contract OR the hash of the invoked method signature and encoded parameters.",
-        },
-        "value": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "(optional) Integer of the value sent with this transaction (in wei).",
-        },
-        "nonce": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "The transaction nonce.",
-        },
-        "gas": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "(optional, default: 90000) Integer of the gas provided for the transaction execution. It will return unused gas",
-          Default:     "90000",
-        },
-        "gasPrice": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "(optional, default: 0) The gas price for the transaction in wei.",
-          Default:     "0",
-        },
-        "chainId": &framework.FieldSchema{
-          Type:        framework.TypeString,
-          Description: "(optional) Chain ID of the target blockchain network. If present, EIP155 signer will be used to sign. If omitted, Homestead signer will be used.",
-          Default:     "0",
-        },
-      },
-      ExistenceCheck: b.pathExistenceCheck,
-      Callbacks: map[logical.Operation]framework.OperationFunc{
-        logical.CreateOperation: b.signTx,
-      },
-    },
+    pathCreateAndList(b),
+    pathReadAndDelete(b),
+    pathSign(b),
   }
 }
 
@@ -145,21 +59,7 @@ func (b *backend) listAccounts(ctx context.Context, req *logical.Request, data *
 		return nil, err
 	}
 
-  accounts := make([]string, len(vals))
-  // resolve the addresses using the stored mappings
-  for idx, key := range vals {
-    entry, err := req.Storage.Get(ctx, fmt.Sprintf("accounts/%s", key))
-    if err != nil {
-      b.Logger().Error("Failed to retrieve account for key", "key", key)
-      accounts[idx] = "0x0000000000000000000000000000000000000000"
-    } else {
-      var account Account
-      _ = entry.DecodeJSON(&account)
-      accounts[idx] = account.Address
-    }
-  }
-
-	return logical.ListResponse(accounts), nil
+	return logical.ListResponse(vals), nil
 }
 
 func (b *backend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
@@ -177,51 +77,32 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
   hash.Write(publicKeyBytes[1:])
   address := hexutil.Encode(hash.Sum(nil)[12:])
 
-  // the account is assigned to path "/accounts/key1"
-  name := data.Get("name").(string)
-  accountPath := fmt.Sprintf("accounts/%s", name)
-  // save the mapping b/w the key name and address to the internal storage path "addresses"
-  mappingPath := fmt.Sprintf("mappings/%s", address)
+  accountPath := fmt.Sprintf("accounts/%s", address)
 
   accountJSON := &Account{
-    Name:         name,
     Address:      address,
     PrivateKey:   privateKeyString,
     PublicKey:    publicKeyString,
   }
 
-  mappingJSON := &KeyAddressMapping{
-    Name:         name,
-  }
-
-  // make the same signing account addressible by name
   entry, _ := logical.StorageEntryJSON(accountPath, accountJSON)
   err := req.Storage.Put(ctx, entry)
   if err != nil {
-		b.Logger().Error("Failed to save the new account to storage by name", "error", err)
-    return nil, err
-  }
-
-  // make the same signing account addressible by address
-  entry, _ = logical.StorageEntryJSON(mappingPath, mappingJSON)
-  err = req.Storage.Put(ctx, entry)
-  if err != nil {
-    b.Logger().Error("Failed to save the new account to storage by address", "error", err)
+		b.Logger().Error("Failed to save the new account to storage", "error", err)
     return nil, err
   }
 
   return &logical.Response{
     Data: map[string]interface{}{
-      "name":     accountJSON.Name,
       "address":  accountJSON.Address,
     },
   }, nil
 }
 
 func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-  name := data.Get("name").(string)
-	b.Logger().Info("Retrieving account for name", "name", name)
-  account, err := b.retrieveAccount(ctx, req, name)
+  address := data.Get("name").(string)
+	b.Logger().Info("Retrieving account for address", "address", address)
+  account, err := b.retrieveAccount(ctx, req, address)
   if err != nil {
   	return nil, err
   }
@@ -231,67 +112,53 @@ func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *f
 
   return &logical.Response{
     Data: map[string]interface{}{
-      "name":     account.Name,
       "address":  account.Address,
     },
   }, nil
 }
 
 func (b *backend) deleteAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-	name := data.Get("name").(string)
-	account, err := b.retrieveAccount(ctx, req, name)
+	address := data.Get("name").(string)
+	account, err := b.retrieveAccount(ctx, req, address)
 	if err != nil {
-		b.Logger().Error("Failed to retrieve the account by name", "name", name, "error", err)
+		b.Logger().Error("Failed to retrieve the account by address", "address", address, "error", err)
 		return nil, err
 	}
 	if account == nil {
 		return nil, nil
 	}
-	if err := req.Storage.Delete(ctx, fmt.Sprintf("accounts/%s", account.Name)); err != nil {
-		b.Logger().Error("Failed to delete the account from storage", "name", name, "error", err)
+	if err := req.Storage.Delete(ctx, fmt.Sprintf("accounts/%s", account.Address)); err != nil {
+		b.Logger().Error("Failed to delete the account from storage", "address", address, "error", err)
 		return nil, err
 	}
 	return nil, nil
 }
 
-func (b *backend) retrieveAccount(ctx context.Context, req *logical.Request, name string) (*Account, error) {
+func (b *backend) retrieveAccount(ctx context.Context, req *logical.Request, address string) (*Account, error) {
   var path string
-  matched, err := regexp.MatchString("^(0x)?[0-9a-fA-F]{40}$", name)
+  matched, err := regexp.MatchString("^(0x)?[0-9a-fA-F]{40}$", address)
   if !matched || err != nil {
-    path = fmt.Sprintf("accounts/%s", name)
+    b.Logger().Error("Failed to retrieve the account, malformatted account address", "address", address, "error", err)
+    return nil, fmt.Errorf("Failed to retrieve the account, malformatted account address")
   } else {
     // make sure the address has the "0x prefix"
-    if name[:2] != "0x" {
-      name = "0x" + name
+    if address[:2] != "0x" {
+      address = "0x" + address
     }
-    // this is an address, first look up the mapping to get the corresponding key name
-    path = fmt.Sprintf("mappings/%s", name)
+    path = fmt.Sprintf("accounts/%s", address)
     entry, err := req.Storage.Get(ctx, path)
     if err != nil {
-      b.Logger().Error("Failed to retrieve the address mapping", "path", path, "error", err)
+      b.Logger().Error("Failed to retrieve the account by address", "path", path, "error", err)
       return nil, err
     }
     if entry == nil {
-      // could not find the corresponding key name for the address
+      // could not find the corresponding key for the address
       return nil, nil
     }
-    var mapping KeyAddressMapping
-    err = entry.DecodeJSON(&mapping)
-    path = fmt.Sprintf("accounts/%s", mapping.Name)
+    var account Account
+    _ = entry.DecodeJSON(&account)
+    return &account, nil
   }
-
-  entry, err := req.Storage.Get(ctx, path)
-  if err != nil {
-		b.Logger().Error("Failed to retrieve the account", "path", path, "error", err)
-    return nil, err
-  }
-  if entry == nil {
-    return nil, nil
-  }
-
-  var account Account
-  _ = entry.DecodeJSON(&account)
-  return &account, nil
 }
 
 func (b *backend) signTx(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
@@ -315,7 +182,7 @@ func (b *backend) signTx(ctx context.Context, req *logical.Request, data *framew
 
   account, err := b.retrieveAccount(ctx, req, from)
   if err != nil {
-		b.Logger().Error("Failed to retrieve the signing account", "name", from, "error", err)
+		b.Logger().Error("Failed to retrieve the signing account", "address", from, "error", err)
     return nil, fmt.Errorf("Error retrieving signing account %s", from)
   }
   if account == nil {

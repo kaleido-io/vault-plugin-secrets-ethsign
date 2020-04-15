@@ -24,7 +24,7 @@ import (
 
 // Factory returns the backend
 func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend, error) {
-	b, err := Backend(conf)
+	b, err := Backend()
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func Factory(ctx context.Context, conf *logical.BackendConfig) (logical.Backend,
 }
 
 // Backend returns the backend
-func Backend(conf *logical.BackendConfig) (*backend, error) {
+func Backend() (*backend, error) {
 	var b backend
 	b.Backend = &framework.Backend{
 		Help: "",
@@ -61,6 +61,7 @@ type backend struct {
 func (b *backend) pathExistenceCheck(ctx context.Context, req *logical.Request, data *framework.FieldData) (bool, error) {
 	out, err := req.Storage.Get(ctx, req.Path)
 	if err != nil {
+		b.Logger().Error("Path existence check failed", err)
 		return false, fmt.Errorf("existence check failed: %v", err)
 	}
 

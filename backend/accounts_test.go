@@ -75,13 +75,6 @@ func (s StorageMock) Get(c context.Context, path string) (*logical.StorageEntry,
   }
 }
 func (s StorageMock) Put(c context.Context, se *logical.StorageEntry) error {
-  if s.switches[2] == 1 {
-    if se.Key[:8] == "mappings" {
-      return errors.New("Bang for Put mappings!")
-    } else {
-      return nil
-    }
-  }
   return errors.New("Bang for Put!")
 }  
 func (s StorageMock) Delete(c context.Context, path string) error {
@@ -100,7 +93,7 @@ func TestAccounts(t *testing.T) {
   b, _ := getBackend(t)
 
   // create key1
-  req := logical.TestRequest(t, logical.CreateOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.UpdateOperation, "accounts")
   storage := req.Storage
   res, err := b.HandleRequest(context.Background(), req)
   if err != nil {
@@ -108,10 +101,9 @@ func TestAccounts(t *testing.T) {
   }
 
   address1 := res.Data["address"].(string)
-  assert.Equal("key1", res.Data["name"])
 
   // create key2
-  req = logical.TestRequest(t, logical.CreateOperation, "accounts/key2")
+  req = logical.TestRequest(t, logical.UpdateOperation, "accounts")
   req.Storage = storage
   res, err = b.HandleRequest(context.Background(), req)
   if err != nil {
@@ -119,7 +111,6 @@ func TestAccounts(t *testing.T) {
   }
 
   address2 := res.Data["address"].(string)
-  assert.Equal("key2", res.Data["name"])
 
   req = logical.TestRequest(t, logical.ListOperation, "accounts")
   req.Storage = storage
@@ -128,34 +119,27 @@ func TestAccounts(t *testing.T) {
     t.Fatalf("err: %v", err)
   }
 
-  expected := &logical.Response{
+  expected1 := &logical.Response{
     Data: map[string]interface{}{
       "keys": []string{address1, address2},
     },
   }
-
-  if !reflect.DeepEqual(resp, expected) {
-    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
-  }
-
-  // read account by key name
-  req = logical.TestRequest(t, logical.ReadOperation, "accounts/key1")
-  req.Storage = storage
-  resp, err = b.HandleRequest(context.Background(), req)
-  if err != nil {
-    t.Fatalf("err: %v", err)
-  }
-  expected = &logical.Response{
+  expected2 := &logical.Response{
     Data: map[string]interface{}{
-      "address": address1,
-      "name": "key1",
+      "keys": []string{address2, address1},
     },
   }
-  if !reflect.DeepEqual(resp, expected) {
-    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
+
+  if !reflect.DeepEqual(resp, expected1) && !reflect.DeepEqual(resp, expected2) {
+    t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected1, resp)
   }
 
   // read account by address
+  expected := &logical.Response{
+    Data: map[string]interface{}{
+      "address": address1,
+    },
+  }
   req = logical.TestRequest(t, logical.ReadOperation, "accounts/" + address1)
   req.Storage = storage
   resp, err = b.HandleRequest(context.Background(), req)
@@ -249,7 +233,7 @@ func TestAccounts(t *testing.T) {
   }
 
   // delete key by name
-  req = logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
+  req = logical.TestRequest(t, logical.DeleteOperation, "accounts/" + address1)
   req.Storage = storage
   if _, err := b.HandleRequest(context.Background(), req); err != nil {
     t.Fatalf("err: %v", err)
@@ -290,25 +274,11 @@ func TestListAccountsFailure1(t *testing.T) {
   assert.Equal("Bang for List!", err.Error())
 }
 
-func TestListAccountsFailure2(t *testing.T) {
-  assert := assert.New(t)
-
-  b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.ListOperation, "accounts")
-  sm := newStorageMock()
-  sm.switches[0] = 1 // have the List() method return success
-  req.Storage = sm
-  resp, err := b.HandleRequest(context.Background(), req)
-
-  assert.Nil(err)
-  assert.ElementsMatch([]string{"0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000"}, resp.Data["keys"])
-}
-
 func TestCreateAccountsFailure1(t *testing.T) {
   assert := assert.New(t)
 
   b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.CreateOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.UpdateOperation, "accounts")
   sm := newStorageMock()
   req.Storage = sm
   _, err := b.HandleRequest(context.Background(), req)
@@ -316,24 +286,11 @@ func TestCreateAccountsFailure1(t *testing.T) {
   assert.Equal("Bang for Put!", err.Error())
 }
 
-func TestCreateAccountsFailure2(t *testing.T) {
-  assert := assert.New(t)
-
-  b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.CreateOperation, "accounts/key1")
-  sm := newStorageMock()
-  sm.switches[2] = 1
-  req.Storage = sm
-  _, err := b.HandleRequest(context.Background(), req)
-
-  assert.Equal("Bang for Put mappings!", err.Error())
-}
-
 func TestReadAccountsFailure1(t *testing.T) {
   assert := assert.New(t)
 
   b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.ReadOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.ReadOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
   sm := newStorageMock()
   req.Storage = sm
   _, err := b.HandleRequest(context.Background(), req)
@@ -384,7 +341,7 @@ func TestDeleteAccountsFailure1(t *testing.T) {
   assert := assert.New(t)
 
   b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
   sm := newStorageMock()
   req.Storage = sm
   resp, err := b.HandleRequest(context.Background(), req)
@@ -397,7 +354,7 @@ func TestDeleteAccountsFailure2(t *testing.T) {
   assert := assert.New(t)
 
   b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
   sm := newStorageMock()
   sm.switches[1] = 1
   req.Storage = sm
@@ -411,7 +368,7 @@ func TestDeleteAccountsFailure3(t *testing.T) {
   assert := assert.New(t)
 
   b, _ := getBackend(t)
-  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/key1")
+  req := logical.TestRequest(t, logical.DeleteOperation, "accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
   sm := newStorageMock()
   sm.switches[1] = 2
   req.Storage = sm
