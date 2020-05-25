@@ -260,6 +260,29 @@ func TestAccounts(t *testing.T) {
   if !reflect.DeepEqual(resp, expected) {
     t.Fatalf("bad response.\n\nexpected: %#v\n\nGot: %#v", expected, resp)
   }
+
+  // import key3
+  req = logical.TestRequest(t, logical.UpdateOperation, "accounts")
+  req.Storage = storage
+  data = map[string]interface{}{
+    "privateKey": "ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2",
+  }
+  req.Data = data
+  res, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  address3 := res.Data["address"].(string)  
+  assert.Equal("0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a", address3)
+
+  // export key3
+  req = logical.TestRequest(t, logical.ReadOperation, "export/accounts/0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a")
+  req.Storage = storage
+  res, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  assert.Equal("ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2", res.Data["privateKey"])
 }
 
 func TestListAccountsFailure1(t *testing.T) {
@@ -284,6 +307,22 @@ func TestCreateAccountsFailure1(t *testing.T) {
   _, err := b.HandleRequest(context.Background(), req)
 
   assert.Equal("Bang for Put!", err.Error())
+}
+
+func TestCreateAccountsFailure2(t *testing.T) {
+  assert := assert.New(t)
+
+  b, _ := getBackend(t)
+  req := logical.TestRequest(t, logical.UpdateOperation, "accounts")
+  data := map[string]interface{}{
+    "privateKey": "abc",
+  }
+  req.Data = data
+  sm := newStorageMock()
+  req.Storage = sm
+  _, err := b.HandleRequest(context.Background(), req)
+
+  assert.Equal("Error reconstructing private key from input hex", err.Error())
 }
 
 func TestReadAccountsFailure1(t *testing.T) {
@@ -335,6 +374,33 @@ func TestReadAccountsFailure4(t *testing.T) {
   resp, _ := b.HandleRequest(context.Background(), req)
 
   assert.Nil(resp)
+}
+
+func TestExportAccountsFailure1(t *testing.T) {
+  assert := assert.New(t)
+
+  b, _ := getBackend(t)
+  req := logical.TestRequest(t, logical.ReadOperation, "export/accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
+  sm := newStorageMock()
+  req.Storage = sm
+  resp, err := b.HandleRequest(context.Background(), req)
+
+  assert.Nil(resp)
+  assert.Equal("Bang for Get!", err.Error())
+}
+
+func TestExportAccountsFailure2(t *testing.T) {
+  assert := assert.New(t)
+
+  b, _ := getBackend(t)
+  req := logical.TestRequest(t, logical.ReadOperation, "export/accounts/0xf809410b0d6f047c603deb311979cd413e025a84")
+  sm := newStorageMock()
+  sm.switches[1] = 1
+  req.Storage = sm
+  resp, err := b.HandleRequest(context.Background(), req)
+
+  assert.Nil(resp)
+  assert.Equal("Account does not exist", err.Error())
 }
 
 func TestDeleteAccountsFailure1(t *testing.T) {

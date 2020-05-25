@@ -86,9 +86,13 @@ Once registered, just like in dev mode, it's ready to be enabled as a secret eng
 ## Interacting with the ethsign Plugin
 The plugin does not interact with the target blockchain. It has very simple responsibilities: sign transactions for submission to an Ethereum blockchain.
 
-Create a new Ethereum account in the vault by specifying a key name, `key1` in the following example:
+### Creating A New Signing Account
+Create a new Ethereum account in the vault by POSTing to the `/accounts` endpoint.
+
+Using the REST API:
 ```
-$ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{}' http://localhost:8200/v1/ethereum/accounts/key1 |jq
+$ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{}' http://localhost:8200/v1/ethereum/accounts |jq
+
 {
   "request_id": "a183425c-0998-0888-c768-8dda4ff60bef",
   "lease_id": "",
@@ -103,11 +107,52 @@ $ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d 
 }
 ```
 
-Note that the plugin is implemented such that the key names, such as `key1` in the example above, do not get persisted. Instead the address of the signing key is used as the index.
+Using the command line:
+```
+$ vault write -force ethereum/accounts
 
-List existing accounts:
+Key        Value
+---        -----
+address    0x73b508a63af509a28fb034bf4742bb1a91fcbc4e
+```
+
+### Importing An Existing Private Key
+You can also create a new signing account by importing from an existing private key. The private key is passed in as a hexidecimal string, without the '0x' prfix.
+
+Using the REST API:
+```
+$ curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"privateKey":"ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2"}' http://localhost:8200/v1/ethereum/accounts |jq
+
+{
+  "request_id": "a183425c-0998-0888-c768-8dda4ff60bef",
+  "lease_id": "",
+  "renewable": false,
+  "lease_duration": 0,
+  "data": {
+    "address": "0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a"
+  },
+  "wrap_info": null,
+  "warnings": null,
+  "auth": null
+}
+```
+
+Using the command line:
+```
+$ vault write ethereum/accounts privateKey=ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2
+
+Key        Value
+---        -----
+address    0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+```
+
+### List Existing Accounts
+The list command only returns the addresses of the signing accounts. To return the private keys, use the `/export/accounts/:address` endpoint.
+
+Using the REST API:
 ```
 $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts?list=true |jq
+
 {
   "request_id": "56c31ef5-9757-1ff4-354e-3b18ecd8ea77",
   "lease_id": "",
@@ -125,9 +170,23 @@ $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/acco
 }
 ```
 
-Inspect the key using the address:
+Using the command line:
+```
+g$ vault list eth/accounts
+
+Keys
+----
+0x73b508a63af509a28fb034bf4742bb1a91fcbc4e
+0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+```
+
+### Reading Individual Accounts
+Inspect the key using the address. Only the address of the signing account is returned. To return the private key, use the `/export/accounts/:address` endpoint.
+
+Using the REST API:
 ```
 $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/0x54edadf1696986c1884534bc6b633ff9a7fdb747 |jq
+
 {
   "request_id": "a183425c-0998-0888-c768-8dda4ff60bef",
   "lease_id": "",
@@ -135,7 +194,6 @@ $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/acco
   "lease_duration": 0,
   "data": {
     "address": "0xb579cbf259a8d36b22f2799eeeae5f3553b11eb7",
-    "name": "key1"
   },
   "wrap_info": null,
   "warnings": null,
@@ -143,9 +201,54 @@ $  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/acco
 }
 ```
 
-Use one of the accounts to sign a transaction:
+Using the command line:
+```
+$ vault read eth/accounts/0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+
+Key        Value
+---        -----
+address    0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+```
+
+### Export An Account
+You can also export the account by returning the private key.
+
+Using the REST API:
+```
+$  curl -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/export/accounts/0x54edadf1696986c1884534bc6b633ff9a7fdb747 |jq
+
+{
+  "request_id": "a183425c-0998-0888-c768-8dda4ff60bef",
+  "lease_id": "",
+  "renewable": false,
+  "lease_duration": 0,
+  "data": {
+    "address": "0xb579cbf259a8d36b22f2799eeeae5f3553b11eb7",
+    "privateKey": "ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2"
+  },
+  "wrap_info": null,
+  "warnings": null,
+  "auth": null
+}
+```
+
+Using the command line:
+```
+$ vault read eth/export/accounts/0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+
+Key           Value
+---           -----
+address       0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a
+privateKey    ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2
+```
+
+### Sign A Transaction
+Use one of the accounts to sign a transaction.
+
+Using the REST API:
 ```
 $  curl -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" http://localhost:8200/v1/ethereum/accounts/0xc9389f98b1c5f5f9b6b61b5e3769471d550ad596/sign -d '{"data":"0x60fe47b10000000000000000000000000000000000000000000000000000000000000014","gas":30791,"gasPrice":0,"nonce":"0x0","to":"0xca0fe7354981aeb9d051e2f709055eb50b774087"}' |jq
+
 {
   "request_id": "4b68c813-eda9-e3c7-4651-e9dbc526bf47",
   "lease_id": "",

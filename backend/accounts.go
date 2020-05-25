@@ -49,6 +49,7 @@ func paths(b *backend) []*framework.Path {
     pathCreateAndList(b),
     pathReadAndDelete(b),
     pathSign(b),
+    pathExport(b),
   }
 }
 
@@ -63,10 +64,25 @@ func (b *backend) listAccounts(ctx context.Context, req *logical.Request, data *
 }
 
 func (b *backend) createAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
-  privateKey, _ := crypto.GenerateKey()
+  keyInput := data.Get("privateKey").(string)
+  var privateKey *ecdsa.PrivateKey
+  var privateKeyString string
+  var err error
+
+  if keyInput != "" {
+    privateKey, err = crypto.HexToECDSA(keyInput)
+    if err != nil {
+      b.Logger().Error("Error reconstructing private key from input hex", "error", err)
+      return nil, fmt.Errorf("Error reconstructing private key from input hex")
+    }
+    privateKeyString = keyInput
+  } else {
+    privateKey, _ = crypto.GenerateKey()
+    privateKeyBytes := crypto.FromECDSA(privateKey)
+    privateKeyString = hexutil.Encode(privateKeyBytes)[2:]
+  }
+
   defer ZeroKey(privateKey)
-  privateKeyBytes := crypto.FromECDSA(privateKey)
-  privateKeyString := hexutil.Encode(privateKeyBytes)[2:]
 
   publicKey := privateKey.Public()
   publicKeyECDSA, _ := publicKey.(*ecdsa.PublicKey)
@@ -86,7 +102,7 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
   }
 
   entry, _ := logical.StorageEntryJSON(accountPath, accountJSON)
-  err := req.Storage.Put(ctx, entry)
+  err = req.Storage.Put(ctx, entry)
   if err != nil {
 		b.Logger().Error("Failed to save the new account to storage", "error", err)
     return nil, err
@@ -113,6 +129,25 @@ func (b *backend) readAccount(ctx context.Context, req *logical.Request, data *f
   return &logical.Response{
     Data: map[string]interface{}{
       "address":  account.Address,
+    },
+  }, nil
+}
+
+func (b *backend) exportAccount(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+  address := data.Get("name").(string)
+  b.Logger().Info("Retrieving account for address", "address", address)
+  account, err := b.retrieveAccount(ctx, req, address)
+  if err != nil {
+    return nil, err
+  }
+  if account == nil {
+    return nil, fmt.Errorf("Account does not exist")
+  }
+
+  return &logical.Response{
+    Data: map[string]interface{}{
+      "address":  account.Address,
+      "privateKey": account.PrivateKey,
     },
   }, nil
 }

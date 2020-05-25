@@ -19,5 +19,12 @@ func pathCreateAndList(b *backend) *framework.Path {
     POST - create a new account
 
     `,
+    Fields: map[string]*framework.FieldSchema{
+      "privateKey": &framework.FieldSchema{
+        Type:        framework.TypeString,
+        Description: "Hexidecimal string for the private key (32-byte or 64-char long). If present, the request will import the given key instead of generating a new key.",
+        Default:     "",
+      },
+    },
   }
 }
