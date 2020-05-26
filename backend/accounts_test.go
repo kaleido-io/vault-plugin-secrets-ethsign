@@ -276,6 +276,20 @@ func TestAccounts(t *testing.T) {
 	address3 := res.Data["address"].(string)
 	assert.Equal("0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a", address3)
 
+  // import key4 using '0x' prefix
+  req = logical.TestRequest(t, logical.UpdateOperation, "accounts")
+  req.Storage = storage
+  data = map[string]interface{}{
+    "privateKey": "0xec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2",
+  }
+  req.Data = data
+  res, err = b.HandleRequest(context.Background(), req)
+  if err != nil {
+    t.Fatalf("err: %v", err)
+  }
+  address4 := res.Data["address"].(string)
+  assert.Equal("0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a", address4)
+
 	// export key3
 	req = logical.TestRequest(t, logical.ReadOperation, "export/accounts/0xd5bcc62d9b1087a5cfec116c24d6187dd40fdf8a")
 	req.Storage = storage
@@ -284,6 +298,12 @@ func TestAccounts(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	assert.Equal("ec85999367d32fbbe02dd600a2a44550b95274cc67d14375a9f0bce233f13ad2", res.Data["privateKey"])
+
+  // validate de-dup of same private keys imported multiple times
+  req = logical.TestRequest(t, logical.ListOperation, "accounts")
+  req.Storage = storage
+  resp, _ = b.HandleRequest(context.Background(), req)
+  assert.Equal(1, len(resp.Data))
 }
 
 func TestListAccountsFailure1(t *testing.T) {
@@ -323,7 +343,24 @@ func TestCreateAccountsFailure2(t *testing.T) {
 	req.Storage = sm
 	_, err := b.HandleRequest(context.Background(), req)
 
-	assert.Equal("Error reconstructing private key from input hex", err.Error())
+	assert.Equal("privateKey must be a 32-byte hexidecimal string", err.Error())
+}
+
+func TestCreateAccountsFailure3(t *testing.T) {
+  assert := assert.New(t)
+
+  b, _ := getBackend(t)
+  req := logical.TestRequest(t, logical.UpdateOperation, "accounts")
+  data := map[string]interface{}{
+    // use N for the secp256k1 curve to trigger an error
+    "privateKey": "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+  }
+  req.Data = data
+  sm := newStorageMock()
+  req.Storage = sm
+  _, err := b.HandleRequest(context.Background(), req)
+
+  assert.Equal("Error reconstructing private key from input hex", err.Error())
 }
 
 func TestReadAccountsFailure1(t *testing.T) {

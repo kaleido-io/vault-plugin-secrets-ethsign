@@ -70,12 +70,18 @@ func (b *backend) createAccount(ctx context.Context, req *logical.Request, data 
 	var err error
 
 	if keyInput != "" {
-		privateKey, err = crypto.HexToECDSA(keyInput)
+    re := regexp.MustCompile("[0-9a-fA-F]{64}$")
+    key := re.FindString(keyInput)
+    if key == "" {
+      b.Logger().Error("Input private key did not parse successfully", "privateKey", keyInput)
+      return nil, fmt.Errorf("privateKey must be a 32-byte hexidecimal string")
+    }
+		privateKey, err = crypto.HexToECDSA(key)
 		if err != nil {
 			b.Logger().Error("Error reconstructing private key from input hex", "error", err)
 			return nil, fmt.Errorf("Error reconstructing private key from input hex")
 		}
-		privateKeyString = keyInput
+		privateKeyString = key
 	} else {
 		privateKey, _ = crypto.GenerateKey()
 		privateKeyBytes := crypto.FromECDSA(privateKey)
