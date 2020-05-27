@@ -270,4 +270,47 @@ To use EIP155 signer, instead of Homestead signer, pass in `chainId` in the JSON
 
 The `signed_transaction` value in the response is already RLP encoded and can be submitted to an Ethereum blockchain directly.
 
+## Access Policies
+The plugin's endpoint paths are designed such that admin-level access policies vs. user-level access policies can be easily separated.
 
+### Sample User Level Policy:
+Use the following policy to assign to a regular user level access token, with the abilities to list keys, read individual keys and sign transactions.
+
+```
+/*
+ * Ability to list existing keys ("list")
+ */
+path "ethereum/accounts" {
+  capabilities = ["list"]
+}
+/*
+ * Ability to retrieve individual keys ("read"), sign transactions ("create")
+ */
+path "ethereum/accounts/*" {
+  capabilities = ["create", "read"]
+}
+```
+
+### Sample Admin Level Policy:
+Use the following policy to assign to a admin level access token, with the full ability to create keys, import existing private keys, export private keys, read/delete individual keys, and sign transactions.
+
+```
+/*
+ * Ability to create key ("update") and list existing keys ("list")
+ */
+path "ethereum/accounts" {
+  capabilities = ["update", "list"]
+}
+/*
+ * Ability to retrieve individual keys ("read"), sign transactions ("create") and delete keys ("delete")
+ */
+path "ethereum/accounts/*" {
+  capabilities = ["create", "read", "delete"]
+}
+/*
+ * Ability to export private keys ("read")
+ */
+path "ethereum/export/accounts/*" {
+  capabilities = ["read"]
+}
+```
