@@ -1,0 +1,3 @@
+# example value: GO-xxxx-xxxx <- no surrounding quotes or anything, just the ID string, new line for each ID
+# All vulnerability listed in this file must not have Hight or Critical severity in NVD database
+# Use https://nvd.nist.gov/vuln/search for checking the severity
